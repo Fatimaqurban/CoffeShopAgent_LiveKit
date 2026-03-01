@@ -4,6 +4,20 @@ Voice AI assistant for a coffee shop: menu, orders, and outbound call to manager
 
 ---
 
+## Demo
+
+- **Video demo:** [Google Drive – Philo Coffee Shop demo](https://drive.google.com/drive/u/0/folders/18BjZw74qf2MMt-nskHpTdtwBfDnjzxfx)
+
+**Backend deployed on Render:**
+
+![Backend Deploy](backend-Deploy.png)
+
+**Outbound Manager call :**
+
+<img src="ManagerCall.jpg" alt="Manager Call" width="200"  />
+
+---
+
 ## Architecture
 
 ```

@@ -55,7 +55,7 @@ if session:
         st.info("Your microphone will be used to talk to the agent. "
                 "Keep this tab open while speaking.")
 
-        # Simple HTML + JS embedding LiveKit Web SDK, with an End Call button
+        # Simple HTML + JS embedding LiveKit Web SDK, with hold music until agent speaks
         html = f"""
 <!DOCTYPE html>
 <html>
@@ -76,8 +76,42 @@ if session:
           dynacast: true,
         }});
 
+        // Hold music: soft looping tone until agent speaks (no external file, works offline)
+        let holdMusicOsc = null;
+        let holdMusicGain = null;
+        let holdMusicCtx = null;
+
+        function startHoldMusic() {{
+          try {{
+            holdMusicCtx = new (window.AudioContext || window.webkitAudioContext)();
+            holdMusicOsc = holdMusicCtx.createOscillator();
+            holdMusicGain = holdMusicCtx.createGain();
+            holdMusicOsc.type = "sine";
+            holdMusicOsc.frequency.setValueAtTime(220, holdMusicCtx.currentTime);
+            holdMusicGain.gain.setValueAtTime(0.08, holdMusicCtx.currentTime);
+            holdMusicOsc.connect(holdMusicGain);
+            holdMusicGain.connect(holdMusicCtx.destination);
+            holdMusicOsc.start(holdMusicCtx.currentTime);
+          }} catch (e) {{
+            console.warn("Hold music not started:", e);
+          }}
+        }}
+
+        function stopHoldMusic() {{
+          if (holdMusicOsc && holdMusicCtx) {{
+            try {{
+              holdMusicGain.gain.linearRampToValueAtTime(0, holdMusicCtx.currentTime + 0.2);
+              holdMusicOsc.stop(holdMusicCtx.currentTime + 0.25);
+            }} catch (e) {{}}
+            holdMusicOsc = null;
+            holdMusicGain = null;
+            holdMusicCtx = null;
+          }}
+        }}
+
         // Expose a function to end the call from the button
         window.endLiveKitCall = async () => {{
+          stopHoldMusic();
           if (room) {{
             try {{
               await room.disconnect();
@@ -89,7 +123,6 @@ if session:
           }}
         }};
 
-        // Wire up the End Call button
         const btn = document.getElementById("end-call-button");
         if (btn) {{
           btn.addEventListener("click", () => {{
@@ -108,6 +141,7 @@ if session:
 
         function playAgentAudio(audioEl) {{
           if (!audioEl) return;
+          stopHoldMusic();
           audioElements.push(audioEl);
           audioContainer.appendChild(audioEl);
           audioEl.play().then(() => {{
@@ -117,7 +151,6 @@ if session:
           }});
         }}
 
-        // IMPORTANT: Register TrackSubscribed BEFORE connect - events can fire during connection
         room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {{
           if (track.kind === "audio") {{
             const audioEl = track.attach();
@@ -127,12 +160,12 @@ if session:
         }});
 
         try {{
+          startHoldMusic();
           await room.connect("{livekit_url}", "{token}");
 
           const tracks = await createLocalTracks({{ audio: true }});
           await room.localParticipant.publishTrack(tracks[0]);
 
-          // Handle agent already in room (tracks published before we connected)
           room.remoteParticipants.forEach((p) => {{
             p.trackPublications.forEach((pub) => {{
               if (pub.track && pub.kind === "audio") {{
@@ -143,6 +176,7 @@ if session:
             }});
           }});
         }} catch (err) {{
+          stopHoldMusic();
           console.error("Error connecting to LiveKit:", err);
         }}
       }})();

@@ -1,0 +1,64 @@
+# Philo Coffee Shop - Run backend, agent, and Streamlit with a single command
+#
+# Prerequisites:
+# 1. Create .env.local from .env.example with LIVEKIT_*, TWILIO_*, BASE_URL, etc.
+# 2. For Twilio webhooks: BASE_URL must be a public URL (use ngrok for local dev)
+#
+# Usage:
+#   docker compose up
+#
+# Then open http://localhost:8501 for Streamlit, or http://localhost:8000 for backend health.
+#
+# Manager outbound calls: Set BASE_URL to your public URL (ngrok) so Twilio can reach /api/telephony/voice
+
+services:
+  backend:
+    build: .
+    command: ["uv", "run", "uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data  # Bind mount: DB stays in project/data/ so you can view in Cursor
+    user: "0:0"  # Root so we can write to shared volume; appuser may lack permission
+    env_file:
+      - .env.local
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    restart: unless-stopped
+
+  agent:
+    build: .
+    command: ["uv", "run", "python", "src/agent.py", "dev"]
+    depends_on:
+      backend:
+        condition: service_healthy
+    volumes:
+      - ./data:/app/data  # Bind mount: same DB as backend 
+    user: "0:0"  # Root for DB access via shared volume
+    env_file:
+      - .env.local
+    environment:
+      - BACKEND_URL=http://backend:8000
+    restart: unless-stopped
+
+  streamlit:
+    build: .
+    command: ["uv", "run", "streamlit", "run", "streamlit_app.py", "--server.port=8501", "--server.address=0.0.0.0"]
+    ports:
+      - "8501:8501"
+    depends_on:
+      backend:
+        condition: service_healthy
+    env_file:
+      - .env.local
+    environment:
+      - BACKEND_URL=http://backend:8000
+    restart: unless-stopped
+
+# Using bind mount ./data:/app/data so the DB lives in project/data/coffeepho.db
+# Using volume would be app-data:/app/data(run docker compose up --build)
+# (visible in Cursor SQLite viewer, same location as when running without Docker)

@@ -18,9 +18,10 @@ def trigger_manager_call(
     total_price: float | None = None,
 ) -> tuple[bool, str]:
     """
-    Get manager phone from DB, place Twilio outbound call to manager,
-    and create a customer row with is_outbound_call=True and any provided details.
-    If customer had ordered, pass order, delivery_type, address, total_price; else order defaults to "Manager transfer requested".
+    Get manager phone from DB, place Twilio outbound call to manager.
+    Creates a customer row with is_outbound_call=True only when this is a transfer-without-order
+    (no order details). If the customer already placed an order, the agent will have saved it via
+    save_customer_order; we do not create a duplicate row here.
     Returns (success, message).
     """
     from db import init_db, get_platform_by_id, create_customer
@@ -41,15 +42,21 @@ def trigger_manager_call(
     if not ok:
         return False, msg
 
-    order_date = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    create_customer(
-        customer_name=customer_name or "Manager transfer request",
-        phone_number=customer_phone or "N/A",
-        order=order or "Manager transfer requested",
-        order_date=order_date,
-        is_outbound_call=True,
-        delivery_type=delivery_type,
-        address=address,
-        total_price=total_price,
-    )
+    # Only create a new customer row when there was no prior order (transfer without order).
+    # If the agent already saved the order via save_customer_order, we must not duplicate it
+    # with is_outbound_call=True.
+    order_text = (order or "").strip()
+    is_transfer_only = not order_text or order_text.lower() == "manager transfer requested"
+    if is_transfer_only:
+        order_date = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        create_customer(
+            customer_name=customer_name or "N/A",
+            phone_number=customer_phone or "N/A",
+            order="Manager transfer requested",
+            order_date=order_date,
+            is_outbound_call=True,
+            delivery_type=delivery_type or "N/A",
+            address=address or "N/A",
+            total_price=total_price,
+        )
     return True, "Outbound call to manager initiated and recorded."

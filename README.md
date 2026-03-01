@@ -330,6 +330,19 @@ Replace the number with your verified Twilio number.
 docker compose down
 ```
 
+### Troubleshooting: "wait_pc_connection timed out" / "room connection was not established"
+
+The agent uses WebRTC to connect to LiveKit Cloud. In Docker, NAT can interfere and cause connection timeouts. This project uses `network_mode: host` for the agent to reduce this.
+
+- **Windows**: Docker Desktop 4.29+ supports host networking (enable in Settings → Features in development → Enable host networking).
+- **If host mode fails** (e.g. "unknown network mode"): Run the agent locally instead of in Docker:
+  ```bash
+  uv run python src/agent.py dev
+  ```
+  Keep the backend running in Docker or separately.
+- **Network-dependent**: Some networks (firewalls, corporate) block WebRTC. Try a different network (e.g. mobile hotspot) to confirm.
+- **"Exception while exporting Span" / OpenTelemetry timeouts**: The agent sends traces to LiveKit Cloud; slow networks can cause export timeouts. We disable this with `OTEL_TRACES_EXPORTER=none` in Docker to avoid those errors.
+
 ---
 
 ## How It Works
@@ -370,6 +383,17 @@ docker compose down
 - **platform**: Manager and Admin phone numbers (id=1 = Manager, used for outbound calls).
 - **menu**: Items and prices.
 - **customer**: Orders with `customer_name`, `phone_number`, `order`, `delivery_type`, `address`, `total_price`, `is_outbound_call`.
+
+### 5. Transcripts (saved after every call)
+
+When a call ends (user hangs up, agent calls `end_call`, etc.), the agent saves a human-readable transcript:
+
+| File | Description |
+|------|-------------|
+| `transcript_{room}_{timestamp}.txt` | Turn-by-turn transcript with room name and timestamp header |
+
+- **Location**: `./transcripts/` by default (override with `TRANSCRIPTS_DIR` in `.env.local`).
+- **Naming**: `{room_name}_{YYYYMMDD_HHMMSS}` for easy sorting.
 
 ---
 

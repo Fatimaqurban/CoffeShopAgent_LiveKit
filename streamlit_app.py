@@ -65,6 +65,8 @@ if session:
   </head>
   <body>
     <button id="end-call-button">End Call</button>
+    <button id="unmute-button" style="display:none;">Click if you don't hear the agent</button>
+    <div id="audio-container"></div>
     <script>
       (async () => {{
         const {{ Room, createLocalTracks, RoomEvent }} = LivekitClient;
@@ -95,24 +97,50 @@ if session:
           }});
         }}
 
+        const audioContainer = document.getElementById("audio-container");
+        const unmuteBtn = document.getElementById("unmute-button");
+        const audioElements = [];
+
+        unmuteBtn.onclick = () => {{
+          audioElements.forEach(el => el.play().catch(() => {{}}));
+          unmuteBtn.style.display = "none";
+        }};
+
+        function playAgentAudio(audioEl) {{
+          if (!audioEl) return;
+          audioElements.push(audioEl);
+          audioContainer.appendChild(audioEl);
+          audioEl.play().then(() => {{
+            unmuteBtn.style.display = "none";
+          }}).catch(() => {{
+            unmuteBtn.style.display = "inline-block";
+          }});
+        }}
+
+        // IMPORTANT: Register TrackSubscribed BEFORE connect - events can fire during connection
+        room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {{
+          if (track.kind === "audio") {{
+            const audioEl = track.attach();
+            audioEl.autoplay = true;
+            playAgentAudio(audioEl);
+          }}
+        }});
+
         try {{
-          // Connect to LiveKit using the token from FastAPI
           await room.connect("{livekit_url}", "{token}");
 
-          // Publish local microphone audio
           const tracks = await createLocalTracks({{ audio: true }});
           await room.localParticipant.publishTrack(tracks[0]);
 
-          // Play remote audio (agent)
-          room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {{
-            if (track.kind === "audio") {{
-              const audioEl = track.attach();
-              audioEl.autoplay = true;
-              audioEl.play().catch(() => {{
-                console.warn("Autoplay failed; user gesture may be required.");
-              }});
-              document.body.appendChild(audioEl);
-            }}
+          // Handle agent already in room (tracks published before we connected)
+          room.remoteParticipants.forEach((p) => {{
+            p.trackPublications.forEach((pub) => {{
+              if (pub.track && pub.kind === "audio") {{
+                const audioEl = pub.track.attach();
+                audioEl.autoplay = true;
+                playAgentAudio(audioEl);
+              }}
+            }});
           }});
         }} catch (err) {{
           console.error("Error connecting to LiveKit:", err);
@@ -122,5 +150,5 @@ if session:
   </body>
 </html>
 """
-        # Render the HTML/JS in the Streamlit app, showing the End Call button
-        st.components.v1.html(html, height=80, width=300)
+        # Render the HTML/JS in the Streamlit app (height allows buttons + audio fallback)
+        st.components.v1.html(html, height=120, width=400)

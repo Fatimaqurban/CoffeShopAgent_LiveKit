@@ -1,4 +1,3 @@
-import json
 import os
 import sys
 from datetime import datetime
@@ -27,7 +26,10 @@ from src.tools import PhiloToolsMixin
 
 load_dotenv(".env.local")
 
-# Directory for per-call transcripts (session report JSON + readable transcript TXT)
+# Transcript saving (runs on every call end via on_session_end):
+# 1. Save transcript_*.txt per call when session closes
+# 2. Configurable via TRANSCRIPTS_DIR env (default: project_root/transcripts)
+# 3. Naming: {room_name}_{timestamp}
 TRANSCRIPTS_DIR = Path(os.getenv("TRANSCRIPTS_DIR", str(_PROJECT_ROOT / "transcripts")))
 
 # EndCallTool: agent must call this when the conversation is finished. Goodbye is spoken by the tool, then call disconnects.
@@ -63,7 +65,7 @@ def _format_chat_item_for_transcript(item) -> str:
 
 
 async def on_session_end(ctx: JobContext) -> None:
-    """Generate a transcript per call: session report JSON + readable transcript TXT."""
+    """Save transcripts after every call. Guideline: one JSON report + one readable TXT per session."""
     try:
         report = ctx.make_session_report()
     except RuntimeError as e:
@@ -76,20 +78,25 @@ async def on_session_end(ctx: JobContext) -> None:
 
     TRANSCRIPTS_DIR.mkdir(parents=True, exist_ok=True)
 
-    # Full session report (conversation history, events, config, etc.)
-    report_path = TRANSCRIPTS_DIR / f"session_report_{base_name}.json"
-    with open(report_path, "w", encoding="utf-8") as f:
-        json.dump(report.to_dict(), f, indent=2, ensure_ascii=False)
-    print(f"Session report for {room_name} saved to {report_path}")
-
-    # Human-readable transcript (turn-by-turn)
+    # Human-readable transcript TXT (turn-by-turn with header)
     transcript_path = TRANSCRIPTS_DIR / f"transcript_{base_name}.txt"
-    lines = []
-    for item in report.chat_history.items:
-        lines.append(_format_chat_item_for_transcript(item))
-    with open(transcript_path, "w", encoding="utf-8") as f:
-        f.write("\n".join(lines))
-    print(f"Transcript for {room_name} saved to {transcript_path}")
+    try:
+        lines = [
+            f"# Transcript: {room_name}",
+            f"# Timestamp: {timestamp} UTC",
+            "",
+        ]
+        items = getattr(report.chat_history, "items", [])
+        if items is not None and items:
+            for item in items:
+                lines.append(_format_chat_item_for_transcript(item))
+        else:
+            lines.append("(no conversation history)")
+        with open(transcript_path, "w", encoding="utf-8") as f:
+            f.write("\n".join(lines))
+        print(f"Transcript for {room_name} saved to {transcript_path}")
+    except Exception as e:
+        print(f"Failed to save transcript: {e}")
 
 
 class Assistant(PhiloToolsMixin, Agent):
@@ -149,10 +156,10 @@ async def my_agent(ctx: JobContext):
                 "type": "server_vad",
                 "silence_duration_ms": 350,
                 "prefix_padding_ms": 150,
-                "threshold": 0.5,
+                "threshold": 0.4,  # Lower = more sensitive to quiet mics
                 "create_response": True,
                 "interrupt_response": True,
-                "idle_timeout_ms": 5000,
+                "idle_timeout_ms": 5000,  # Respond sooner after user stops speaking
             },
             temperature=0.8,
         ),

@@ -36,13 +36,20 @@ services:
     depends_on:
       backend:
         condition: service_healthy
+    # Use host network to avoid Docker NAT interfering with WebRTC (fixes "wait_pc_connection timed out").
+    # On Linux/WSL2 only. On Windows Docker Desktop, host mode is not supported—remove this block if needed.
+    network_mode: host
     volumes:
-      - ./data:/app/data  # Bind mount: same DB as backend 
-    user: "0:0"  # Root for DB access via shared volume
+      - ./data:/app/data  # Bind mount: same DB as backend
+      - ./transcripts:/app/transcripts  # Per-call transcripts (TRANSCRIPTS_DIR)
+    user: "0:0"  # Root for DB + transcripts access
     env_file:
       - .env.local
     environment:
-      - BACKEND_URL=http://backend:8000
+      # With host network, use localhost since "backend" hostname is not available
+      - BACKEND_URL=http://127.0.0.1:8000
+      - TRANSCRIPTS_DIR=/app/transcripts
+      - OTEL_TRACES_EXPORTER=none
     restart: unless-stopped
 
   streamlit:
@@ -61,4 +68,3 @@ services:
 
 # Using bind mount ./data:/app/data so the DB lives in project/data/coffeepho.db
 # Using volume would be app-data:/app/data(run docker compose up --build)
-# (visible in Cursor SQLite viewer, same location as when running without Docker)

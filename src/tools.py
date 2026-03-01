@@ -1,6 +1,5 @@
-"""Philo Coffee Shop agent tools (menu check, list menu, save order, manager call, end call)."""
+"""Philo Coffee Shop agent tools (menu check, list menu, save order, manager call). end_call is provided by EndCallTool in agent.py."""
 
-import asyncio
 import json
 import logging
 import os
@@ -8,28 +7,9 @@ from datetime import datetime, timezone
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError, URLError
 
-from livekit.agents import RunContext, function_tool, get_job_context
+from livekit.agents import RunContext, function_tool
 
 logger = logging.getLogger("agent")
-
-GOODBYE_MESSAGE = "Thank you so much for ordering with us. Goodbye."
-
-
-async def hangup_call() -> None:
-    """Delete the room so all participants (SIP, browser) disconnect, then shut down the job."""
-    ctx = get_job_context()
-    if ctx is None:
-        return
-    try:
-        task = ctx.delete_room(room_name=ctx.room.name)
-        await task
-        logger.info("Room deleted, call ended.")
-    except Exception as e:
-        logger.warning("hangup_call delete_room: %s", e)
-    try:
-        ctx.shutdown(reason="agent_ended_call")
-    except Exception as e:
-        logger.warning("hangup_call shutdown: %s", e)
 
 
 class PhiloToolsMixin:
@@ -190,17 +170,3 @@ class PhiloToolsMixin:
             logger.warning("request_manager_call request error: %s", e)
             return "Could not connect to the phone system. Apologize and suggest the customer call the shop at 051 23445726 to speak with the manager."
 
-    @function_tool()
-    async def end_call(self, context: RunContext) -> str:
-        """End the call and hang up. Call this tool (no arguments) when: (1) After save_customer_order when user said no to 'anything else?'—say only the shop number and pick-up address if pickup, then call end_call. (2) After saying 'Our manager would be calling you in a while.' (3) When the user says goodbye. Do NOT say 'Thank you for ordering' or 'Goodbye' in your own message—this tool will say it once. If you say it too, the customer hears it twice."""
-        session = context.session
-        # Speak the goodbye ourselves so we control the exact message and no extra LLM speech follows
-        handle = session.say(GOODBYE_MESSAGE, add_to_chat_ctx=False)
-        try:
-            await asyncio.wait_for(asyncio.shield(handle.wait_for_playout()), timeout=12.0)
-        except asyncio.TimeoutError:
-            logger.warning("end_call: goodbye playout timed out")
-        except Exception as e:
-            logger.warning("end_call wait: %s", e)
-        await hangup_call()
-        return "Call ended."

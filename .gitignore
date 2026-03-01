@@ -12,3 +12,4 @@ KMS
 .ruff_cache
 .claude/settings.local.json
 ./data/coffeepho.db
+transcripts/

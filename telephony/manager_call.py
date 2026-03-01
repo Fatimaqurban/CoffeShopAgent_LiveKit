@@ -12,10 +12,15 @@ from telephony.twilio_client import place_outbound_call
 def trigger_manager_call(
     customer_name: str = "",
     customer_phone: str = "",
+    order: str | None = None,
+    delivery_type: str | None = None,
+    address: str | None = None,
+    total_price: float | None = None,
 ) -> tuple[bool, str]:
     """
     Get manager phone from DB, place Twilio outbound call to manager,
-    and create a customer row with order="Manager transfer requested", is_outbound_call=True.
+    and create a customer row with is_outbound_call=True and any provided details.
+    If customer had ordered, pass order, delivery_type, address, total_price; else order defaults to "Manager transfer requested".
     Returns (success, message).
     """
     from db import init_db, get_platform_by_id, create_customer
@@ -40,8 +45,11 @@ def trigger_manager_call(
     create_customer(
         customer_name=customer_name or "Manager transfer request",
         phone_number=customer_phone or "N/A",
-        order="Manager transfer requested",
+        order=order or "Manager transfer requested",
         order_date=order_date,
         is_outbound_call=True,
+        delivery_type=delivery_type,
+        address=address,
+        total_price=total_price,
     )
     return True, "Outbound call to manager initiated and recorded."

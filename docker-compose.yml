@@ -1,15 +1,3 @@
-# Philo Coffee Shop - Run backend, agent, and Streamlit with a single command
-#
-# Prerequisites:
-# 1. Create .env.local from .env.example with LIVEKIT_*, TWILIO_*, BASE_URL, etc.
-# 2. For Twilio webhooks: BASE_URL must be a public URL (use ngrok for local dev)
-#
-# Usage:
-#   docker compose up
-#
-# Then open http://localhost:8501 for Streamlit, or http://localhost:8000 for backend health.
-#
-# Manager outbound calls: Set BASE_URL to your public URL (ngrok) so Twilio can reach /api/telephony/voice
 
 services:
   backend:

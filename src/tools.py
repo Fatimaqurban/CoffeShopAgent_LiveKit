@@ -126,7 +126,7 @@ class PhiloToolsMixin:
                 total_price=total_price if total_price else None,
             )
             total_msg = f" Total is {total_price} dollars." if total_price else ""
-            return f"Order saved successfully. Customer id {customer_id}.{total_msg} Thank them and remind them: for queries they can call the shop; if pick up, tell them the pick-up address (it is in your instructions)."
+            return f"Order saved successfully. Customer id {customer_id}.{total_msg} Confirm the order to the customer, then ask 'Is there anything else you'd like to ask?' and wait for their response. Do NOT end the call yet—only when they say no or goodbye should you give the shop number and pick-up address, then call end_call."
         except Exception:
             logger.exception("Failed to save customer order")
             return "Failed to save the order. Apologize and ask the user to try again or call back."
@@ -137,19 +137,33 @@ class PhiloToolsMixin:
         context: RunContext,
         customer_name: str = "",
         customer_phone: str = "",
+        order: str = "",
+        delivery_type: str = "",
+        address: str = "",
+        total_price: float | None = None,
     ) -> str:
-        """Trigger an outbound call to the manager (using the phone number stored in the database). Use when the user says they want to talk to the manager or speak to the manager. The backend will call the manager and record the request with is_outbound_call=true. Pass the customer's name and phone if you have them from the conversation.
+        """Trigger an outbound call to the manager. Use when the user says they want to talk to the manager. Pass any customer details you have from the conversation so the manager has context: name, phone, and if they placed an order also pass order (items), delivery_type (home/pickup), address (if delivery), total_price.
 
         Args:
             customer_name: The customer's name if known; otherwise leave empty.
             customer_phone: The customer's phone number if known; otherwise leave empty.
+            order: If they placed an order, pass the items (e.g. "Latte, Muffin"); otherwise leave empty.
+            delivery_type: "home" or "pickup" if known; otherwise leave empty.
+            address: Delivery address if delivery_type is home; otherwise leave empty.
+            total_price: Total order price in dollars if they ordered; otherwise leave unset.
         """
         backend_url = (os.environ.get("BACKEND_URL") or "http://localhost:8000").rstrip("/")
         url = f"{backend_url}/api/telephony/outbound-manager"
-        data = json.dumps({
+        payload = {
             "customer_name": (customer_name or "").strip(),
             "customer_phone": (customer_phone or "").strip(),
-        }).encode("utf-8")
+            "order": (order or "").strip(),
+            "delivery_type": (delivery_type or "").strip(),
+            "address": (address or "").strip(),
+        }
+        if total_price is not None:
+            payload["total_price"] = total_price
+        data = json.dumps(payload).encode("utf-8")
         req = Request(url, data=data, method="POST", headers={"Content-Type": "application/json"})
         try:
             with urlopen(req, timeout=10) as resp:

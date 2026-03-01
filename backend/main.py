@@ -225,16 +225,24 @@ def create_session_token():
 class OutboundManagerRequest(BaseModel):
     customer_name: str = ""
     customer_phone: str = ""
+    order: str = ""  # If customer ordered, pass items; else "Manager transfer requested"
+    delivery_type: str = ""  # "home" or "pickup" if known
+    address: str = ""  # If delivery, pass address
+    total_price: float | None = None  # If order was placed, pass total
 
 
 @app.post("/api/telephony/outbound-manager", status_code=200)
 def outbound_manager(request: OutboundManagerRequest):
-    """Trigger outbound Twilio call to manager; record in DB with is_outbound_call=true."""
+    """Trigger outbound Twilio call to manager; record in DB with is_outbound_call=true and any customer details."""
     try:
         from telephony import trigger_manager_call
         ok, msg = trigger_manager_call(
             customer_name=(request.customer_name or "").strip(),
             customer_phone=(request.customer_phone or "").strip(),
+            order=(request.order or "").strip() or None,
+            delivery_type=(request.delivery_type or "").strip() or None,
+            address=(request.address or "").strip() or None,
+            total_price=request.total_price,
         )
         if not ok:
             raise HTTPException(status_code=400, detail=msg)
